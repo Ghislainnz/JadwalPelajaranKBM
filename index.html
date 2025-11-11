@@ -1,0 +1,500 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Jadwal Pelajaran — Sekolah</title>
+
+  <!-- Tailwind CDN (rapid dev) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Google Font -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --primary: #0f172a;    /* dark-blue */
+      --accent: #0ea5a4;     /* teal */
+      --card: #ffffff;
+    }
+    html,body { font-family: 'Inter', system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; }
+    .glass { background: linear-gradient(180deg, rgba(255,255,255,0.7), rgba(255,255,255,0.6)); backdrop-filter: blur(6px); }
+    .subject-badge { display:inline-block; padding:4px 8px; border-radius:8px; font-weight:600; font-size:0.85rem; color:#fff; }
+    @media print {
+      .no-print { display:none !important; }
+    }
+  </style>
+</head>
+<body class="bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen text-slate-800">
+  <!-- Topbar -->
+  <header class="no-print sticky top-0 z-20 bg-white/60 glass border-b border-slate-200">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-emerald-400 flex items-center justify-center text-white font-bold">JS</div>
+        <div>
+          <div class="text-lg font-semibold">Jadwal Sekolah</div>
+          <div class="text-xs text-slate-500">Kelola jadwal per-kelas — tampilan modern seperti platform pembelajaran</div>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <button id="exportBtn" class="px-3 py-2 bg-white border rounded shadow-sm text-sm hover:shadow">Export JSON</button>
+        <button id="importBtn" class="px-3 py-2 bg-emerald-500 text-white rounded shadow-sm text-sm hover:opacity-95">Import</button>
+        <input id="fileInput" type="file" accept="application/json" class="hidden" />
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 py-6">
+    <div class="grid grid-cols-12 gap-6">
+      <!-- Sidebar -->
+      <aside class="col-span-12 md:col-span-3 lg:col-span-3">
+        <div class="bg-white rounded-xl shadow p-4 sticky top-20">
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="text-sm font-semibold text-slate-700">Kelas</h2>
+            <button id="addClassBtn" class="text-xs px-2 py-1 bg-indigo-600 text-white rounded">Tambah</button>
+          </div>
+
+          <div id="classesList" class="space-y-2 max-h-72 overflow-auto"></div>
+
+          <hr class="my-4">
+
+          <div class="text-sm text-slate-600 mb-2">Aksi Cepat</div>
+          <div class="flex flex-col gap-2">
+            <button id="addEventBtn" class="px-3 py-2 bg-emerald-500 text-white rounded shadow-sm">Tambah Pelajaran</button>
+            <button id="printBtn" class="px-3 py-2 border rounded">Cetak Jadwal</button>
+            <button id="clearBtn" class="px-3 py-2 text-red-600 border rounded">Hapus Semua</button>
+          </div>
+
+          <p class="text-xs text-slate-400 mt-3">Data tersimpan lokal di browser. Gunakan Export/Import untuk backup atau pindah perangkat.</p>
+        </div>
+      </aside>
+
+      <!-- Content -->
+      <section class="col-span-12 md:col-span-9 lg:col-span-9">
+        <div class="bg-white rounded-xl shadow p-5">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <div class="text-xs text-slate-500">Kelas aktif</div>
+              <div id="activeClassName" class="text-2xl font-bold">—</div>
+            </div>
+
+            <div class="flex items-center gap-3">
+              <label class="text-sm text-slate-600">Mode Tampilan</label>
+              <select id="viewMode" class="px-3 py-2 border rounded">
+                <option value="week">Mingguan</option>
+                <option value="list">Daftar</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Schedule area -->
+          <div id="scheduleRoot" class="min-h-[360px]"></div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <!-- Modal (Add/Edit Event & class) -->
+  <div id="modal" class="fixed inset-0 hidden items-center justify-center z-50">
+    <div class="absolute inset-0 bg-black/40" onclick="closeModal()"></div>
+    <div class="relative w-full max-w-2xl mx-auto bg-white rounded-xl shadow-lg p-5">
+      <div class="flex items-center justify-between mb-3">
+        <h3 id="modalTitle" class="text-lg font-semibold">Tambah Pelajaran</h3>
+        <button onclick="closeModal()" class="text-slate-500">✕</button>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="text-sm text-slate-600">Hari</label>
+          <select id="eventDay" class="w-full px-3 py-2 border rounded">
+            <option value="0">Senin</option>
+            <option value="1">Selasa</option>
+            <option value="2">Rabu</option>
+            <option value="3">Kamis</option>
+            <option value="4">Jumat</option>
+            <option value="5">Sabtu</option>
+            <option value="6">Minggu</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="text-sm text-slate-600">Slot Waktu</label>
+          <div class="flex gap-2">
+            <input id="startTime" type="time" class="w-full px-3 py-2 border rounded" />
+            <input id="endTime" type="time" class="w-full px-3 py-2 border rounded" />
+          </div>
+        </div>
+
+        <div class="col-span-2">
+          <label class="text-sm text-slate-600">Mata Pelajaran</label>
+          <input id="subject" class="w-full px-3 py-2 border rounded" placeholder="Contoh: Matematika" />
+        </div>
+
+        <div>
+          <label class="text-sm text-slate-600">Guru / Ruang</label>
+          <input id="meta" class="w-full px-3 py-2 border rounded" placeholder="Pak Budi • R. 101" />
+        </div>
+
+        <div>
+          <label class="text-sm text-slate-600">Warna</label>
+          <input id="color" type="color" value="#06b6d4" class="w-16 h-10 p-0 border rounded" />
+        </div>
+      </div>
+
+      <div class="mt-4 flex justify-end gap-2">
+        <button id="deleteEventBtn" class="px-4 py-2 bg-red-50 text-red-600 border rounded hidden">Hapus</button>
+        <button id="saveEventBtn" class="px-4 py-2 bg-emerald-500 text-white rounded">Simpan</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Utilities -->
+  <template id="classItemTpl">
+    <div class="flex items-center justify-between p-2 rounded hover:bg-slate-50">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-md bg-indigo-600 text-white flex items-center justify-center font-semibold text-sm">K</div>
+        <div>
+          <div class="className font-medium"></div>
+          <div class="text-xs text-slate-400 classMeta">0 mata pelajaran</div>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <button class="renameClass text-xs px-2 py-1 border rounded">Rename</button>
+        <button class="delClass text-xs px-2 py-1 border rounded text-red-600">Hapus</button>
+      </div>
+    </div>
+  </template>
+
+  <script>
+    /* -----------------------------
+       Data model & persistence
+       ----------------------------- */
+    const STORAGE_KEY = 'rg_style_schedule_v1';
+    const DAYS = ['Senin','Selasa','Rabu','Kamis','Jumat','Sabtu','Minggu'];
+
+    let state = { classes: [], activeClassId: null };
+    let editingEvent = null;
+
+    function uid(){ return Math.random().toString(36).slice(2,9); }
+
+    function load(){
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if(raw) state = JSON.parse(raw);
+      } catch(e){ console.error('load', e); }
+    }
+    function save(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+
+    /* -----------------------------
+       Initial sample data (if empty)
+       ----------------------------- */
+    function ensureSample(){
+      if(state.classes.length) return;
+      const id = uid();
+      const sample = {
+        id, name: 'XI-TKJ', schedule: [
+          [ {id:uid(), day:0, start:'07:00', end:'08:30', subject:'Matematika', meta:'Pak Budi • R101', color:'#06b6d4'} ], // Senin
+          [ {id:uid(), day:1, start:'08:30', end:'10:00', subject:'Bahasa Indonesia', meta:'Bu Ani • R102', color:'#ef4444'} ],
+          [],[],[],[],[]
+        ]
+      };
+      state.classes.push(sample);
+      state.activeClassId = id;
+      save();
+    }
+
+    /* -----------------------------
+       DOM refs
+       ----------------------------- */
+    const classesList = document.getElementById('classesList');
+    const addClassBtn = document.getElementById('addClassBtn');
+    const addEventBtn = document.getElementById('addEventBtn');
+    const scheduleRoot = document.getElementById('scheduleRoot');
+    const activeClassName = document.getElementById('activeClassName');
+    const modal = document.getElementById('modal');
+    const modalTitle = document.getElementById('modalTitle');
+    const eventDay = document.getElementById('eventDay');
+    const startTime = document.getElementById('startTime');
+    const endTime = document.getElementById('endTime');
+    const subjectInput = document.getElementById('subject');
+    const metaInput = document.getElementById('meta');
+    const colorInput = document.getElementById('color');
+    const saveEventBtn = document.getElementById('saveEventBtn');
+    const deleteEventBtn = document.getElementById('deleteEventBtn');
+    const viewMode = document.getElementById('viewMode');
+    const exportBtn = document.getElementById('exportBtn');
+    const importBtn = document.getElementById('importBtn');
+    const fileInput = document.getElementById('fileInput');
+    const printBtn = document.getElementById('printBtn');
+    const clearBtn = document.getElementById('clearBtn');
+
+    /* -----------------------------
+       CRUD: classes & events
+       ----------------------------- */
+    function addClass(name){
+      const c = { id: uid(), name: name || 'Kelas Baru', schedule: [[],[],[],[],[],[],[]] };
+      state.classes.push(c);
+      state.activeClassId = c.id;
+      save(); render();
+    }
+    function deleteClass(id){
+      state.classes = state.classes.filter(x=>x.id !== id);
+      if(state.activeClassId === id) state.activeClassId = state.classes.length ? state.classes[0].id : null;
+      save(); render();
+    }
+    function renameClass(id, name){
+      const cls = state.classes.find(x=>x.id===id); if(!cls) return;
+      cls.name = name; save(); render();
+    }
+
+    function addEventToClass(clsId, ev){
+      const cls = state.classes.find(x=>x.id===clsId); if(!cls) return;
+      cls.schedule[ev.day] ||= [];
+      cls.schedule[ev.day].push(ev);
+      cls.schedule[ev.day].sort((a,b)=>a.start.localeCompare(b.start));
+      save(); render();
+    }
+    function updateEvent(clsId, evId, newData){
+      const cls = state.classes.find(x=>x.id===clsId); if(!cls) return;
+      for(let d=0; d<7; d++){
+        const idx = cls.schedule[d].findIndex(e=>e.id===evId);
+        if(idx>=0){
+          cls.schedule[d][idx] = {...cls.schedule[d][idx], ...newData};
+          cls.schedule[d].sort((a,b)=>a.start.localeCompare(b.start));
+          save(); render(); return;
+        }
+      }
+    }
+    function deleteEvent(clsId, evId){
+      const cls = state.classes.find(x=>x.id===clsId); if(!cls) return;
+      for(let d=0; d<7; d++){
+        const idx = cls.schedule[d].findIndex(e=>e.id===evId);
+        if(idx>=0){
+          cls.schedule[d].splice(idx,1); save(); render(); return;
+        }
+      }
+    }
+
+    /* -----------------------------
+       Render UI
+       ----------------------------- */
+    function renderClasses(){
+      classesList.innerHTML = '';
+      const tpl = document.getElementById('classItemTpl');
+      state.classes.forEach(c=>{
+        const node = tpl.content.cloneNode(true);
+        node.querySelector('.className').textContent = c.name;
+        const count = c.schedule.reduce((s,a)=>s + (a?.length||0),0);
+        node.querySelector('.classMeta').textContent = `${count} mata pelajaran`;
+        const card = node.querySelector(':scope > div');
+        card.querySelector('.w-9').textContent = c.name.split(' ').map(w=>w[0]).slice(0,2).join('');
+        card.querySelector('.w-9').style.background = randomGradientFromString(c.id);
+        card.querySelector('.w-9').style.color = 'white';
+
+        card.querySelector('.w-9').onclick = ()=> { state.activeClassId = c.id; save(); render(); };
+        card.querySelector('.className').onclick = ()=> { state.activeClassId = c.id; save(); render(); };
+
+        // buttons
+        card.querySelector('.renameClass').onclick = ()=> {
+          const nn = prompt('Ganti nama kelas', c.name);
+          if(nn) renameClass(c.id, nn);
+        };
+        card.querySelector('.delClass').onclick = ()=> {
+          if(confirm(`Hapus kelas "${c.name}"?`)) deleteClass(c.id);
+        };
+
+        // highlight active
+        if(c.id === state.activeClassId) card.classList.add('ring-2','ring-emerald-200');
+
+        classesList.appendChild(node);
+      });
+    }
+
+    function renderSchedule(){
+      const cls = state.classes.find(x=>x.id === state.activeClassId);
+      if(!cls){ scheduleRoot.innerHTML = `<div class="text-center py-20 text-slate-400">Pilih atau buat kelas untuk mulai</div>`; activeClassName.textContent = '—'; return; }
+      activeClassName.textContent = cls.name;
+
+      if(viewMode.value === 'list'){
+        let html = '';
+        DAYS.forEach((d, idx)=>{
+          const arr = cls.schedule[idx] || [];
+          html += `<div class="mb-6">
+            <div class="flex items-center justify-between mb-2">
+              <div class="text-lg font-semibold">${d}</div>
+              <div class="text-sm text-slate-500">${arr.length} jadwal</div>
+            </div>
+            <div class="space-y-2">`;
+          if(arr.length) arr.forEach(ev=>{
+            html += `<div class="p-3 border rounded flex items-center justify-between" data-id="${ev.id}" style="cursor:pointer;">
+              <div>
+                <div class="font-semibold">${ev.subject}</div>
+                <div class="text-xs text-slate-500">${ev.start} - ${ev.end} ${ev.meta ? ' • ' + ev.meta : ''}</div>
+              </div>
+              <div class="flex items-center gap-3">
+                <span class="subject-badge" style="background:${ev.color}"></span>
+                <button class="px-2 py-1 text-xs border rounded editEv">Edit</button>
+              </div>
+            </div>`;
+          }); else html += `<div class="text-slate-400 p-3 rounded border">Tidak ada jadwal</div>`;
+          html += `</div></div>`;
+        });
+        scheduleRoot.innerHTML = html;
+        scheduleRoot.querySelectorAll('.editEv').forEach(btn=>{
+          btn.onclick = (e)=>{
+            const id = e.target.closest('[data-id]').dataset.id;
+            openEditModal(id);
+          };
+        });
+        return;
+      }
+
+      // Week grid: responsive columns
+      let grid = '<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-3">';
+      DAYS.forEach((d, idx)=>{
+        const arr = cls.schedule[idx] || [];
+        grid += `<div class="p-3 bg-slate-50 rounded-lg min-h-[160px]">
+          <div class="flex items-center justify-between mb-2">
+            <div class="font-semibold">${d}</div>
+            <div class="text-xs text-slate-400">${arr.length}</div>
+          </div>`;
+        if(arr.length){
+          arr.forEach(ev=>{
+            grid += `<div class="mb-2 p-3 rounded-lg shadow-sm" data-id="${ev.id}" style="background:${ev.color}; color:white; cursor:pointer;">
+              <div class="font-semibold">${ev.subject}</div>
+              <div class="text-xs opacity-90">${ev.start} - ${ev.end} ${ev.meta ? ' • '+ev.meta : ''}</div>
+            </div>`;
+          });
+        } else grid += `<div class="text-slate-400">-</div>`;
+        grid += `</div>`;
+      });
+      grid += '</div>';
+      scheduleRoot.innerHTML = grid;
+
+      // attach edit handlers
+      scheduleRoot.querySelectorAll('[data-id]').forEach(el=>{
+        el.onclick = ()=> openEditModal(el.dataset.id);
+      });
+    }
+
+    function render(){ renderClasses(); renderSchedule(); }
+
+    /* -----------------------------
+       Modal controls
+       ----------------------------- */
+    function openModal(){
+      modal.classList.remove('hidden');
+    }
+    function closeModal(){
+      modal.classList.add('hidden');
+      editingEvent = null;
+      deleteEventBtn.classList.add('hidden');
+    }
+
+    function openAddModal(){
+      const cls = state.classes.find(x=>x.id === state.activeClassId);
+      if(!cls){ alert('Pilih kelas terlebih dahulu'); return; }
+      editingEvent = null;
+      modalTitle.textContent = 'Tambah Pelajaran';
+      eventDay.value = 0; startTime.value = '07:00'; endTime.value = '08:00';
+      subjectInput.value = ''; metaInput.value = ''; colorInput.value = '#06b6d4';
+      deleteEventBtn.classList.add('hidden');
+      openModal();
+    }
+
+    function openEditModal(evId){
+      const cls = state.classes.find(x=>x.id === state.activeClassId);
+      if(!cls) return;
+      for(let d=0; d<7; d++){
+        const ev = (cls.schedule[d]||[]).find(x=>x.id === evId);
+        if(ev){
+          editingEvent = { id: ev.id, day: d };
+          modalTitle.textContent = 'Edit Pelajaran';
+          eventDay.value = d; startTime.value = ev.start; endTime.value = ev.end;
+          subjectInput.value = ev.subject; metaInput.value = ev.meta || ''; colorInput.value = ev.color || '#06b6d4';
+          deleteEventBtn.classList.remove('hidden');
+          openModal(); return;
+        }
+      }
+    }
+
+    saveEventBtn.onclick = ()=>{
+      const cls = state.classes.find(x=>x.id === state.activeClassId);
+      if(!cls) { alert('Pilih kelas'); return; }
+      const ev = {
+        subject: subjectInput.value.trim() || '(Tanpa nama)',
+        meta: metaInput.value.trim(),
+        start: startTime.value || '00:00',
+        end: endTime.value || '00:00',
+        color: colorInput.value || '#06b6d4'
+      };
+      if(editingEvent){
+        updateEvent(cls.id, editingEvent.id, {...ev, day: Number(eventDay.value)});
+      } else {
+        ev.id = uid(); ev.day = Number(eventDay.value);
+        addEventToClass(cls.id, ev);
+      }
+      closeModal();
+    };
+
+    deleteEventBtn.onclick = ()=>{
+      if(!editingEvent) return;
+      if(confirm('Hapus pelajaran ini?')) {
+        deleteEvent(state.activeClassId, editingEvent.id);
+        closeModal();
+      }
+    };
+
+    /* -----------------------------
+       Helpers & UI bindings
+       ----------------------------- */
+    addClassBtn.onclick = ()=>{
+      const name = prompt('Nama kelas baru (contoh: XI-TKJ)');
+      if(name) addClass(name.trim());
+    };
+    addEventBtn.onclick = openAddModal;
+    exportBtn.onclick = ()=>{
+      const blob = new Blob([JSON.stringify(state, null, 2)], {type:'application/json'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = 'jadwal-sekolah.json'; a.click();
+      URL.revokeObjectURL(url);
+    };
+    importBtn.onclick = ()=> fileInput.click();
+    fileInput.onchange = async (e)=>{
+      const f = e.target.files[0]; if(!f) return;
+      try {
+        const text = await f.text();
+        state = JSON.parse(text);
+        save(); render(); alert('Import berhasil');
+      } catch(err){ alert('Gagal import: '+err); }
+    };
+
+    printBtn.onclick = ()=> window.print();
+    clearBtn.onclick = ()=>{
+      if(confirm('Hapus semua data (akan hilang dari browser)?')) {
+        state = { classes: [], activeClassId: null };
+        save(); render();
+      }
+    };
+
+    viewMode.onchange = ()=> render();
+
+    // simple gradient generator for avatar
+    function randomGradientFromString(s){
+      // deterministic-ish
+      let h = 0; for(let i=0;i<s.length;i++) h = s.charCodeAt(i) + ((h<<5)-h);
+      const c1 = Math.abs(h*1234567)%360; const c2 = (c1 + 60)%360;
+      return `linear-gradient(135deg, hsl(${c1} 70% 45%), hsl(${c2} 70% 40%))`;
+    }
+
+    /* -----------------------------
+       Init
+       ----------------------------- */
+    load(); ensureSample(); render();
+
+    // expose openEditModal to window for direct testing
+    window.openEditModal = openEditModal;
+  </script>
+</body>
+</html>
